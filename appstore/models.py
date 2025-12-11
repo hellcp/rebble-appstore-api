@@ -43,6 +43,24 @@ class Collection(db.Model):
 db.Index('collection_platforms_index', Collection.platforms, postgresql_using="gin")
 
 
+app_tags = Table('app_tags', db.Model.metadata,
+                 db.Column('tag_id', db.String(24), db.ForeignKey('tags.id', ondelete='cascade')),
+                 db.Column('app_id', db.String(24), db.ForeignKey('apps.id', ondelete='cascade')))
+
+db.Index('app_tags_tag_app_index', 'app_tags.tag_id', 'app_tags.app_id', unique=True)
+
+
+class Tag(db.Model):
+    __tablename__ = "tags"
+    id = db.Column(db.String(24), primary_key=True)
+    name = db.Column(db.String, nullable=False, unique=True)
+    apps = db.relationship('App',
+                           back_populates='tags',
+                           secondary=app_tags,
+                           passive_deletes=True,
+                           lazy='dynamic')
+
+
 class App(db.Model):
     __tablename__ = "apps"
     id = db.Column(db.String(24), primary_key=True)
@@ -79,6 +97,11 @@ class App(db.Model):
     timeline_token = db.Column(db.String, index=True)
     installs = db.Column(db.Integer, index=True)
     discourse_topic_id = db.Column(db.Integer)
+    tags = db.relationship('Tag',
+                           back_populates='apps',
+                           secondary=app_tags,
+                           passive_deletes=True,
+                           lazy='selectin')
 
 
 category_banner_apps = Table('category_banner_apps', db.Model.metadata,

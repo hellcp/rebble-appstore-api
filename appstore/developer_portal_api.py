@@ -13,7 +13,7 @@ from sqlalchemy.exc import DataError
 from zipfile import BadZipFile
 
 from .utils import demand_authed_request, id_generator, validate_new_app_fields, is_valid_category, is_valid_appinfo, is_valid_platform, clone_asset_collection_without_images, is_valid_image_file, is_valid_image_size, get_max_image_dimensions, is_users_developer_id, user_is_wizard, newAppValidationException, algolia_app, first_version_is_newer, get_uid
-from .models import db, App, Developer, Release, AssetCollection, AvailableArchive
+from .models import db, App, Developer, Release, AssetCollection, AvailableArchive, Tag
 from .pbw import PBW, release_from_pbw
 from .s3 import upload_pbw, upload_asset, get_link_for_archive
 from .settings import config
@@ -71,6 +71,17 @@ def create_developer():
             db.session.commit()
 
         return jsonify(success=True, id=me['id'], message="Onboarded user")
+
+
+@devportal_api.route('/tags')
+def get_tags():
+        tags = Tag.query.all()
+        name = request.args.get('name')
+        if name:
+            tags = tags.filter(Tag.name.like(name))
+        tag_names = [tag.name for tag in tags]
+        return jsonify(tags=tag_names)
+
 
 @devportal_api.route('/submit', methods=['POST'])
 def submit_new_app():
@@ -162,6 +173,10 @@ def submit_new_app():
         if 'visible' in params and params['visible'] == 'false':
             is_visible = False
 
+        tags = []
+        if 'tags' in params:
+            tags = Tag.query.filter(Tag.name.in_(params['tags'].split(',')))
+
         # Remove any platforms with no screenshots
         screenshots = {k: v for k, v in screenshots.items() if v}
         app_obj = App(
@@ -190,6 +205,7 @@ def submit_new_app():
             timeline_token=timeline_token,
             visible=is_visible,
             website=params['website'] if 'website' in params else "",
+            tags=tags
         )
         db.session.add(app_obj)
         print(f"Created app {app_obj.id}")
@@ -236,7 +252,8 @@ def update_app_fields(app_id):
             "source": str,
             "visible": bool,
             "timeline_enabled": bool,
-            "timeline_token": None
+            "timeline_token": None,
+            "tags": str
         }
 
         # Check all valid passed fields are correct type
@@ -273,6 +290,10 @@ def update_app_fields(app_id):
                 req["timeline_token"] = None
             elif app.timeline_token is None:
                 req["timeline_token"] = secrets.token_urlsafe(32)
+
+        tags = []
+        if "tags" in params:
+            tags = Tag.query.filter(Tag.name.in_(params['tags'].split(",")))
 
         # Update the app
         for x in req:
